@@ -32,9 +32,14 @@ function multi(series,base,death,W=700,H=220,label=true){const all=series.flatMa
  o+='</svg>';if(label)o+=`<div class="mut">grau gestrichelt = ${f2(base,0)} $ Start${death?' · rot = '+f2(death,0)+' $ Todeslinie':''} · ${f2(y0,0)} – ${f2(y1,0)} $</div>`;return o}
 function render(){const s=S;let o='';const age=(Date.now()-new Date(s.last_cycle))/60000;const R=s.rules||{};const DEATH=R.death||5000;
  const B=[...(s.bots||[])].sort((a,b)=>(b.alive-a.alive)||(b.equity-a.equity));const alive=B.filter(b=>b.alive);const byId={};B.forEach((b,i)=>{byId[b.id]=b;b.col=COL[(b.id-1)%COL.length]});
- const tot=alive.reduce((a,b)=>a+b.equity,0);
- o+=`<div class="card"><div class="grid"><div><div class="mut">Lebende Bots</div><div class="big">${alive.length}</div></div><div><div class="mut">Bester Bot</div><b>${esc(alive[0]?.name)}</b><br><span class="${cls(alive[0]?.pnl_pct)}">${sg(alive[0]?.pnl_pct)}${f2(alive[0]?.pnl_pct)} %</span></div></div>
- <div class="mut">Summe lebende Bots ${f2(tot,0)} $ · Geburten ${s.stats?.births??0} · Tode ${s.stats?.deaths??0} · EUR/USD ${f2(s.fx_eurusd,4)}<br>Letzter Zyklus ${tm(s.last_cycle)} ${age>15?'<span class="tag warn">verzögert</span>':''} · Start ${tm(s.started_at)}</div></div>`;
+ const sumE=alive.reduce((a,b)=>a+(b.equity||0),0),sumCash=alive.reduce((a,b)=>a+(b.cash||0),0),inv=sumE-sumCash;
+ const funded=B.reduce((a,b)=>a+(b.start_money||0),0),deadRest=B.filter(b=>!b.alive).reduce((a,b)=>a+(b.equity||0),0);
+ const pnl=sumE+deadRest-funded,pnlp=funded?pnl/funded*100:0,nDead=B.length-alive.length;
+ o+=`<div class="card" style="border:2px solid ${pnl>=0?'#3fb950':'#f85149'}"><div class="mut">Gesamtwert aller lebenden Bots</div><div class="big" id="total">${f2(sumE)} $</div>
+ <div class="${cls(pnl)}" style="font-size:18px;font-weight:600">${sg(pnl)}${f2(pnl)} $ (${sg(pnlp)}${f2(pnlp)} %)</div>
+ <div class="mut">gegenüber ${f2(funded,0)} $ Startgeld insgesamt (${B.length} Bots × Startgeld, inkl. Kinder/Nachrücker)${nDead?` · darin ${f2(deadRest,0)} $ Restwert toter Bots`:''}</div>
+ <div class="grid" style="margin-top:8px"><div>Bots<br><b>${alive.length} leben</b> · <b>${nDead} tot</b></div><div>Bargeld / investiert<br><b>${f2(sumCash,0)} $</b> / <b>${f2(inv,0)} $</b></div></div>
+ <div class="mut" style="margin-top:6px">Bester Bot: <b>${esc(alive[0]?.name)}</b> <span class="${cls(alive[0]?.pnl_pct)}">${sg(alive[0]?.pnl_pct)}${f2(alive[0]?.pnl_pct)} %</span> · Geburten ${s.stats?.births??0} · Tode ${s.stats?.deaths??0} · EUR/USD ${f2(s.fx_eurusd,4)}<br>Letzter Zyklus ${tm(s.last_cycle)} ${age>15?'<span class="tag warn">verzögert</span>':''} · Start ${tm(s.started_at)}${s._cached?' · <span class="tag warn">zuletzt gespeicherte Daten</span>':''}</div></div>`;
  o+='<h2>Börsen</h2><div class="card">';for(const[k,m] of Object.entries(s.markets||{})){o+=`<div><span class="tag ${m.open?'open':'closed'}">${m.open?'offen':'geschlossen'}</span> ${esc(m.label)}${(s.event_block||{})[k]?`<br><span class="tag warn">⏸ ${esc(s.event_block[k])}</span>`:''}</div>`}o+='</div>';
  o+='<h2>🏆 Rangliste</h2><div class="card"><table class="lb"><tr><th>Bot</th><th>Konto</th><th>Trades</th></tr>';
  B.forEach((b,i)=>{const dist=b.equity-DEATH;const pct=Math.max(0,Math.min(100,dist/(b.start_money-DEATH)*50));
@@ -74,6 +79,9 @@ function render(){const s=S;let o='';const age=(Date.now()-new Date(s.last_cycle
  • Kosten: ${f2(C.fee_usd)} $ Gebühr je Trade + ${f2((C.slippage_pct||0)*100)} % Schlupf · Konto in USD, EUR-Werte mit Live-EUR/USD umgerechnet<br>• Keine echten Trades, kein echtes Geld, keine Anlageberatung</div>
  <div class="mut" style="text-align:center;margin:14px 0">Veröffentlicht ${tm(s.published_at)} · aktualisiert sich jede Minute</div>`;
  document.getElementById('app').innerHTML=o}
-async function load(){try{const r=await fetch(GIST+'?t='+Date.now(),{cache:'no-store'});const d=await r.json();if(d&&d.bots){S=d;render()}else if(!S)document.getElementById('app').innerHTML='<div class="card">Simulation startet gerade – gleich nochmal versuchen.</div>'}catch(e){if(!S)document.getElementById('app').innerHTML='<div class="card">Daten kommen gerade nicht an – gleich nochmal versuchen.</div>'}}
+async function load(){let d=null;try{const r=await fetch(GIST+'?t='+Date.now(),{cache:'no-store'});if(r.ok)d=await r.json()}catch(e){}
+ if(d&&d.bots&&d.bots.length){S=d;try{localStorage.setItem('stocksim_last',JSON.stringify(d))}catch(e){}render();return}
+ if(!S){try{const c=JSON.parse(localStorage.getItem('stocksim_last')||'null');if(c&&c.bots){c._cached=true;S=c;render();return}}catch(e){}
+  document.getElementById('app').innerHTML='<div class="card">Daten kommen gerade nicht an – gleich nochmal versuchen.</div>'}else if(!S._cached){S._cached=true;render()}}
 load();setInterval(load,60000);
 </script></body></html>
