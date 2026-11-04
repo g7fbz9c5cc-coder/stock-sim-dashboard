@@ -1,0 +1,59 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aktien-Simulation (Spielgeld)</title>
+<style>
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#0e1117;color:#e6e6e6;font-size:15px}
+.w{max-width:760px;margin:auto;padding:12px}h1{font-size:20px;margin:6px 0}h2{font-size:16px;margin:18px 0 8px;color:#9ecbff}
+.card{background:#171b24;border-radius:12px;padding:12px;margin:8px 0}.big{font-size:30px;font-weight:700}
+.pos{color:#3fb950}.neg{color:#f85149}.mut{color:#8b949e;font-size:13px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;margin:2px}
+.open{background:#1f6f3b}.closed{background:#5a2328}.warn{background:#6b5300}table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:5px 4px;border-bottom:1px solid #262c38;text-align:left}th{color:#8b949e;font-weight:500}a{color:#9ecbff}
+.banner{background:#3b2f00;color:#ffd866;padding:8px;border-radius:8px;font-size:13px;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}svg{width:100%;height:auto}
+</style></head><body><div class="w">
+<div class="banner">SPIELGELD-SIMULATION · keine echten Trades · keine Anlageberatung · nur Lesen</div>
+<h1>📈 Aktien · Gold · Silber</h1>
+<div id="app"><div class="card">Lade Daten …</div></div>
+</div>
+<script>
+const GIST='https://gist.githubusercontent.com/g7fbz9c5cc-coder/cb40487bad5f5f4cda3874f13257dd46/raw/state.json';
+let S=null;
+const f2=(x,d=2)=>x==null?'–':Number(x).toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
+const cls=x=>x>0?'pos':(x<0?'neg':'');
+const tm=t=>{if(!t)return'–';const d=typeof t==='number'?new Date(t*1000):new Date(t);return d.toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function curve(h,start){if(!h||h.length<2)return '<div class="mut">Kontoverlauf erscheint nach ein paar Zyklen.</div>';
+ const W=700,H=180,xs=h.map(p=>p[0]),ys=h.map(p=>p[1]).concat([start]);const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),ry=(y1-y0)||1;
+ const X=x=>(x-x0)/((x1-x0)||1)*W,Y=y=>H-8-(y-y0)/ry*(H-16);const pts=h.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
+ const last=h[h.length-1][1];return `<svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="${Y(start)}" y2="${Y(start)}" stroke="#555" stroke-dasharray="4"/><polyline fill="none" stroke="${last>=start?'#3fb950':'#f85149'}" stroke-width="2.5" points="${pts}"/></svg><div class="mut">gestrichelt = Startkapital ${f2(start,0)} $ · ${f2(y0,0)} – ${f2(y1,0)} $</div>`}
+function render(){const s=S;let o='';const age=(Date.now()-new Date(s.last_cycle))/60000;
+ o+=`<div class="card"><div class="mut">Kontostand (USD)</div><div class="big">${f2(s.equity)} $</div><div class="${cls(s.pnl_usd)}">${s.pnl_usd>=0?'+':''}${f2(s.pnl_usd)} $ (${s.pnl_pct>=0?'+':''}${f2(s.pnl_pct)} %) gegenüber ${f2(s.start_capital,0)} $</div>
+ <div class="mut">Bargeld ${f2(s.cash)} $ · ${Object.keys(s.positions||{}).length} Positionen · EUR/USD ${f2(s.fx_eurusd,4)}<br>Letzter Zyklus ${tm(s.last_cycle)} ${age>15?'<span class="tag warn">verzögert</span>':''} · Start ${tm(s.started_at)}</div></div>`;
+ o+='<h2>Börsen</h2><div class="card">';for(const[k,m] of Object.entries(s.markets||{})){o+=`<div><span class="tag ${m.open?'open':'closed'}">${m.open?'offen':'geschlossen'}</span> ${esc(m.label)}${(s.event_block||{})[k]?`<br><span class="tag warn">⏸ ${esc(s.event_block[k])}</span>`:''}</div>`}o+='</div>';
+ o+=`<h2>Kontoverlauf</h2><div class="card">${curve(s.equity_history,s.start_capital)}</div>`;
+ const P=Object.entries(s.positions||{});o+='<h2>Offene Positionen</h2><div class="card">';
+ if(!P.length)o+='<div class="mut">Keine offenen Positionen – die Strategie wartet auf Kaufsignale (Aufwärtstrend + Ausbruch).</div>';else{o+='<table><tr><th>Wert</th><th>Einstieg</th><th>Aktuell</th><th>G/V</th></tr>';
+ for(const[k,p] of P){const lp=((s.last_prices||{})[k]||{}).price;const pc=lp?(lp/p.entry-1)*100:0;o+=`<tr><td><b>${esc(p.name)}</b><br><span class="mut">${esc(k)} · seit ${tm(p.opened)}</span></td><td>${f2(p.entry)} ${p.cur==='EUR'?'€':'$'}</td><td>${f2(lp)} ${p.cur==='EUR'?'€':'$'}</td><td class="${cls(pc)}">${pc>=0?'+':''}${f2(pc)} %</td></tr>`}o+='</table>'}o+='</div>';
+ o+='<h2>Letzte Trades</h2><div class="card">';const T=s.trades||[];if(!T.length)o+='<div class="mut">Noch keine Trades.</div>';else{o+='<table>';for(const t of T.slice(0,25)){o+=`<tr><td>${tm(t.ts)}</td><td><b>${t.side}</b> ${esc(t.name)}<br><span class="mut">${esc(t.why)}</span></td><td>${f2(t.price)} ${t.cur==='EUR'?'€':'$'}${t.pnl_pct!=null?`<br><span class="${cls(t.pnl_pct)}">${t.pnl_pct>=0?'+':''}${f2(t.pnl_pct)} % (${f2(t.pnl_usd)} $)</span>`:''}</td></tr>`}o+='</table>'}o+='</div>';
+ o+='<h2>Entscheidungen</h2><div class="card">';const D=s.decisions||[];if(!D.length)o+='<div class="mut">Noch keine.</div>';else{o+='<table>';for(const d of D.slice(0,15))o+=`<tr><td>${tm(d.ts)}</td><td><b>${esc(d.action)}</b> ${esc(d.sym)}<br><span class="mut">${esc(d.why)}</span></td></tr>`;o+='</table>'}o+='</div>';
+ const U=s.universe||{};o+='<h2>Signal-Übersicht (alle Werte)</h2><div class="card"><table><tr><th>Wert</th><th>Kurs</th><th>Status</th></tr>';
+ for(const[k,u] of Object.entries(U)){const lp=(s.last_prices||{})[k]||{};const ch=lp.prev_close?(lp.price/lp.prev_close-1)*100:null;o+=`<tr><td><b>${esc(u.name)}</b><br><span class="mut">${esc(k)}</span></td><td>${f2(lp.price)} ${lp.cur==='EUR'?'€':'$'}${ch!=null?`<br><span class="${cls(ch)}">${ch>=0?'+':''}${f2(ch)} %</span>`:''}</td><td class="mut">${(s.positions||{})[k]?'<b>im Depot</b>':esc((s.signals||{})[k]||'–')}</td></tr>`}o+='</table></div>';
+ const I=s.info||{};o+=`<h2>Wichtige Termine heute (investing.com)</h2><div class="card"><div class="mut">Nur Kontext: ${esc(I.note||'')}</div><table>`;
+ for(const e of (I.calendar||[]).filter(e=>e.imp>=3))o+=`<tr><td>${tm(e.time)}</td><td><b>${esc(e.cur)}</b> ${esc(e.event)}</td><td class="mut">Prog. ${esc(e.forecast||'–')}<br>Ist ${esc(e.actual||'–')}</td></tr>`;o+=`</table><div class="mut">Stand ${tm(I.updated)}</div></div>`;
+ o+='<h2>Nachrichten</h2><div class="card">';for(const n of (I.news_general||[]).slice(0,10))o+=`<div style="margin:6px 0"><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.t)}</a><br><span class="mut">${esc(n.src)} · ${tm(n.ts)}</span></div>`;
+ for(const k of Object.keys(s.positions||{})){const N=(I.news_by_symbol||{})[k]||[];if(N.length){o+=`<div style="margin-top:10px"><b>${esc(U[k]?.name||k)}</b></div>`;for(const n of N)o+=`<div class="mut">• <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.t)}</a></div>`}}
+ o+=`<div class="mut" style="margin-top:8px">Quellen: ${Object.entries(I.status||{}).map(([k,v])=>esc(k)+': '+esc(v)).join(' · ')}</div></div>`;
+ const B=s.backtest;if(B){o+=`<h2>Backtest (historisch – kein Live-Ergebnis)</h2><div class="card"><div class="mut">${esc(B.strategy)} · ${B.from} bis ${B.to} · Tagesdaten</div><div class="grid">
+ <div>Rendite<br><b class="${cls(B.return_pct)}">${f2(B.return_pct)} %</b></div><div>Max. Rückgang<br><b class="neg">−${f2(B.max_drawdown_pct)} %</b></div>
+ <div>Trades<br><b>${B.trades}</b></div><div>Trefferquote<br><b>${f2(B.win_rate_pct,1)} %</b></div><div>Ø Gewinn / Ø Verlust<br><b>+${f2(B.avg_win_pct)} % / ${f2(B.avg_loss_pct)} %</b></div><div>Zum Vergleich: alle Werte kaufen & halten<br><b>${f2(B.buy_hold_equal_weight_pct)} %</b></div></div>${curve((B.curve||[]).map(p=>[new Date(p[0]).getTime()/1000,p[1]]),B.start)}</div>`}
+ const R=(s.rules||{}).strategy||{},C=(s.rules||{}).costs||{},E=(s.rules||{}).events||{};
+ o+=`<h2>Regeln (${esc(R.name||'')})</h2><div class="card" style="font-size:13px;line-height:1.5">
+ • Kauf nur bei Aufwärtstrend: Kurs über ${R.sma_slow}-Tage-Schnitt und ${R.sma_fast}-Tage-Schnitt über ${R.sma_slow}-Tage-Schnitt<br>
+ • Auslöser: Kurs bricht über das Hoch der letzten ${R.breakout_days} Tage<br>• Je Position ca. ${f2(R.position_pct*100,0)} % des Kontos, max. ${R.max_positions} Positionen, Gold+Silber max. ${f2(R.max_metals_pct*100,0)} %<br>
+ • Stop-Loss −${f2(R.stop_loss_pct*100,0)} % vom Einstieg; ab +${f2(R.trail_activate_pct*100,0)} % Nachzieh-Stop −${f2(R.trail_pct*100,0)} % vom Hoch${R.trend_exit?`; Verkauf auch, wenn Tagesschluss unter ${R.sma_slow}-Tage-Schnitt`:''}<br>
+ • Nach Verlust ${R.reentry_cooldown_days} Tage Pause für diesen Wert · Handel nur bei offener Börse<br>• Keine neuen Käufe ${E.block_minutes_before} Min vor bis ${E.block_minutes_after} Min nach wichtigen Wirtschaftsterminen (USD/EUR)<br>
+ • Kosten: ${f2(C.fee_usd)} $ Gebühr je Trade + ${f2((C.slippage_pct||0)*100)} % Schlupf · Kurse von Yahoo Finance (bis ~15 Min verzögert) · Konto in USD, EUR-Werte mit Live-EUR/USD umgerechnet</div>
+ <div class="mut" style="text-align:center;margin:14px 0">Veröffentlicht ${tm(s.published_at)} · aktualisiert sich jede Minute</div>`;
+ document.getElementById('app').innerHTML=o}
+async function load(){try{const r=await fetch(GIST+'?t='+Date.now(),{cache:'no-store'});const d=await r.json();if(d&&d.equity!=null){S=d;render()}else if(!S)document.getElementById('app').innerHTML='<div class="card">Simulation startet gerade – gleich nochmal versuchen.</div>'}catch(e){if(!S)document.getElementById('app').innerHTML='<div class="card">Daten kommen gerade nicht an – gleich nochmal versuchen.</div>'}}
+load();setInterval(load,60000);
+</script></body></html>
