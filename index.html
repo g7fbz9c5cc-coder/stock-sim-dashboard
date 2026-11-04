@@ -9,51 +9,71 @@ body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#0e1117;
 td,th{padding:5px 4px;border-bottom:1px solid #262c38;text-align:left}th{color:#8b949e;font-weight:500}a{color:#9ecbff}
 .banner{background:#3b2f00;color:#ffd866;padding:8px;border-radius:8px;font-size:13px;text-align:center}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}svg{width:100%;height:auto}
+.dead{opacity:.5}.lb td{vertical-align:top}.bar{height:6px;background:#262c38;border-radius:3px;margin-top:3px}.bar i{display:block;height:6px;border-radius:3px}
 </style></head><body><div class="w">
 <div class="banner">SPIELGELD-SIMULATION · keine echten Trades · keine Anlageberatung · nur Lesen</div>
-<h1>📈 Aktien · Gold · Silber</h1>
+<h1>📈 Aktien-Bots · Gold · Silber</h1><div class="mut">Mehrere Spielgeld-Bots mit eigenen Strategien – wer unter 5.000 $ fällt, stirbt; erfolgreiche Bots bekommen Kinder.</div>
 <div id="app"><div class="card">Lade Daten …</div></div>
 </div>
 <script>
 const GIST='https://gist.githubusercontent.com/g7fbz9c5cc-coder/cb40487bad5f5f4cda3874f13257dd46/raw/state.json';
 let S=null;
 const f2=(x,d=2)=>x==null?'–':Number(x).toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
-const cls=x=>x>0?'pos':(x<0?'neg':'');
+const cls=x=>x>0?'pos':(x<0?'neg':'');const sg=x=>x>0?'+':'';
 const tm=t=>{if(!t)return'–';const d=typeof t==='number'?new Date(t*1000):new Date(t);return d.toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function curve(h,start){if(!h||h.length<2)return '<div class="mut">Kontoverlauf erscheint nach ein paar Zyklen.</div>';
- const W=700,H=180,xs=h.map(p=>p[0]),ys=h.map(p=>p[1]).concat([start]);const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),ry=(y1-y0)||1;
- const X=x=>(x-x0)/((x1-x0)||1)*W,Y=y=>H-8-(y-y0)/ry*(H-16);const pts=h.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
- const last=h[h.length-1][1];return `<svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="${Y(start)}" y2="${Y(start)}" stroke="#555" stroke-dasharray="4"/><polyline fill="none" stroke="${last>=start?'#3fb950':'#f85149'}" stroke-width="2.5" points="${pts}"/></svg><div class="mut">gestrichelt = Startkapital ${f2(start,0)} $ · ${f2(y0,0)} – ${f2(y1,0)} $</div>`}
-function render(){const s=S;let o='';const age=(Date.now()-new Date(s.last_cycle))/60000;
- o+=`<div class="card"><div class="mut">Kontostand (USD)</div><div class="big">${f2(s.equity)} $</div><div class="${cls(s.pnl_usd)}">${s.pnl_usd>=0?'+':''}${f2(s.pnl_usd)} $ (${s.pnl_pct>=0?'+':''}${f2(s.pnl_pct)} %) gegenüber ${f2(s.start_capital,0)} $</div>
- <div class="mut">Bargeld ${f2(s.cash)} $ · ${Object.keys(s.positions||{}).length} Positionen · EUR/USD ${f2(s.fx_eurusd,4)}<br>Letzter Zyklus ${tm(s.last_cycle)} ${age>15?'<span class="tag warn">verzögert</span>':''} · Start ${tm(s.started_at)}</div></div>`;
+const COL=['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffd866','#ff7b72','#79c0ff','#56d364','#e3b341','#bc8cff','#ffa198','#a5d6ff','#7ee787','#ffab70','#f778ba','#c9d1d9'];
+const cur=c=>c==='EUR'?'€':'$';
+function multi(series,base,death,W=700,H=220,label=true){const all=series.flatMap(s=>s.h);if(all.length<2)return '<div class="mut">Kurven erscheinen nach ein paar Zyklen.</div>';
+ const xs=all.map(p=>p[0]),ys=all.map(p=>p[1]).concat([base]).concat(death?[death]:[]);const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),ry=(y1-y0)||1;
+ const X=x=>(x-x0)/((x1-x0)||1)*W,Y=y=>H-8-(y-y0)/ry*(H-16);let o=`<svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="${Y(base)}" y2="${Y(base)}" stroke="#555" stroke-dasharray="4"/>`;
+ if(death)o+=`<line x1="0" x2="${W}" y1="${Y(death)}" y2="${Y(death)}" stroke="#f85149" stroke-dasharray="6"/>`;
+ for(const s of series){if(s.h.length<1)continue;const pts=(s.h.length==1?[s.h[0],[x1,s.h[0][1]]]:s.h).map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');o+=`<polyline fill="none" stroke="${s.c}" stroke-width="${s.w||2}" ${s.dead?'stroke-dasharray="3"':''} points="${pts}"/>`}
+ o+='</svg>';if(label)o+=`<div class="mut">grau gestrichelt = ${f2(base,0)} $ Start${death?' · rot = '+f2(death,0)+' $ Todeslinie':''} · ${f2(y0,0)} – ${f2(y1,0)} $</div>`;return o}
+function render(){const s=S;let o='';const age=(Date.now()-new Date(s.last_cycle))/60000;const R=s.rules||{};const DEATH=R.death||5000;
+ const B=[...(s.bots||[])].sort((a,b)=>(b.alive-a.alive)||(b.equity-a.equity));const alive=B.filter(b=>b.alive);const byId={};B.forEach((b,i)=>{byId[b.id]=b;b.col=COL[(b.id-1)%COL.length]});
+ const tot=alive.reduce((a,b)=>a+b.equity,0);
+ o+=`<div class="card"><div class="grid"><div><div class="mut">Lebende Bots</div><div class="big">${alive.length}</div></div><div><div class="mut">Bester Bot</div><b>${esc(alive[0]?.name)}</b><br><span class="${cls(alive[0]?.pnl_pct)}">${sg(alive[0]?.pnl_pct)}${f2(alive[0]?.pnl_pct)} %</span></div></div>
+ <div class="mut">Summe lebende Bots ${f2(tot,0)} $ · Geburten ${s.stats?.births??0} · Tode ${s.stats?.deaths??0} · EUR/USD ${f2(s.fx_eurusd,4)}<br>Letzter Zyklus ${tm(s.last_cycle)} ${age>15?'<span class="tag warn">verzögert</span>':''} · Start ${tm(s.started_at)}</div></div>`;
  o+='<h2>Börsen</h2><div class="card">';for(const[k,m] of Object.entries(s.markets||{})){o+=`<div><span class="tag ${m.open?'open':'closed'}">${m.open?'offen':'geschlossen'}</span> ${esc(m.label)}${(s.event_block||{})[k]?`<br><span class="tag warn">⏸ ${esc(s.event_block[k])}</span>`:''}</div>`}o+='</div>';
- o+=`<h2>Kontoverlauf</h2><div class="card">${curve(s.equity_history,s.start_capital)}</div>`;
- const P=Object.entries(s.positions||{});o+='<h2>Offene Positionen</h2><div class="card">';
- if(!P.length)o+='<div class="mut">Keine offenen Positionen – die Strategie wartet auf Kaufsignale (Aufwärtstrend + Ausbruch).</div>';else{o+='<table><tr><th>Wert</th><th>Einstieg</th><th>Aktuell</th><th>G/V</th></tr>';
- for(const[k,p] of P){const lp=((s.last_prices||{})[k]||{}).price;const pc=lp?(lp/p.entry-1)*100:0;o+=`<tr><td><b>${esc(p.name)}</b><br><span class="mut">${esc(k)} · seit ${tm(p.opened)}</span></td><td>${f2(p.entry)} ${p.cur==='EUR'?'€':'$'}</td><td>${f2(lp)} ${p.cur==='EUR'?'€':'$'}</td><td class="${cls(pc)}">${pc>=0?'+':''}${f2(pc)} %</td></tr>`}o+='</table>'}o+='</div>';
- o+='<h2>Letzte Trades</h2><div class="card">';const T=s.trades||[];if(!T.length)o+='<div class="mut">Noch keine Trades.</div>';else{o+='<table>';for(const t of T.slice(0,25)){o+=`<tr><td>${tm(t.ts)}</td><td><b>${t.side}</b> ${esc(t.name)}<br><span class="mut">${esc(t.why)}</span></td><td>${f2(t.price)} ${t.cur==='EUR'?'€':'$'}${t.pnl_pct!=null?`<br><span class="${cls(t.pnl_pct)}">${t.pnl_pct>=0?'+':''}${f2(t.pnl_pct)} % (${f2(t.pnl_usd)} $)</span>`:''}</td></tr>`}o+='</table>'}o+='</div>';
- o+='<h2>Entscheidungen</h2><div class="card">';const D=s.decisions||[];if(!D.length)o+='<div class="mut">Noch keine.</div>';else{o+='<table>';for(const d of D.slice(0,15))o+=`<tr><td>${tm(d.ts)}</td><td><b>${esc(d.action)}</b> ${esc(d.sym)}<br><span class="mut">${esc(d.why)}</span></td></tr>`;o+='</table>'}o+='</div>';
- const U=s.universe||{};o+='<h2>Signal-Übersicht (alle Werte)</h2><div class="card"><table><tr><th>Wert</th><th>Kurs</th><th>Status</th></tr>';
- for(const[k,u] of Object.entries(U)){const lp=(s.last_prices||{})[k]||{};const ch=lp.prev_close?(lp.price/lp.prev_close-1)*100:null;o+=`<tr><td><b>${esc(u.name)}</b><br><span class="mut">${esc(k)}</span></td><td>${f2(lp.price)} ${lp.cur==='EUR'?'€':'$'}${ch!=null?`<br><span class="${cls(ch)}">${ch>=0?'+':''}${f2(ch)} %</span>`:''}</td><td class="mut">${(s.positions||{})[k]?'<b>im Depot</b>':esc((s.signals||{})[k]||'–')}</td></tr>`}o+='</table></div>';
+ o+='<h2>🏆 Rangliste</h2><div class="card"><table class="lb"><tr><th>Bot</th><th>Konto</th><th>Trades</th></tr>';
+ B.forEach((b,i)=>{const dist=b.equity-DEATH;const pct=Math.max(0,Math.min(100,dist/(b.start_money-DEATH)*50));
+  o+=`<tr class="${b.alive?'':'dead'}"><td><span style="color:${b.col}">●</span> <b>${b.alive?(i+1)+'. ':'† '}${esc(b.name)}</b> <span class="mut">Gen ${b.gen}${b.parent?' · Kind von '+esc(byId[b.parent]?.name||'#'+b.parent):''}</span><br><span class="mut">${esc(b.short||b.desc)}</span>${b.alive?'':`<br><span class="neg" style="font-size:12px">gestorben ${tm(b.died_at)}: ${esc(b.death_reason)}</span>`}</td>
+  <td><b>${f2(b.equity,0)} $</b><br><span class="${cls(b.pnl_pct)}">${sg(b.pnl_pct)}${f2(b.pnl_pct)} %</span><br><span class="mut" style="font-size:11px">${b.alive?f2(dist,0)+' $ über Todeslinie':'tot'}</span><div class="bar"><i style="width:${pct}%;background:${dist<1500?'#f85149':(dist<4000?'#ffd866':'#3fb950')}"></i></div></td>
+  <td>${b.closed_trades}<br><span class="mut">${b.win_rate==null?'–':f2(b.win_rate,0)+' % Treffer'}</span><br><span class="mut">${Object.keys(b.positions||{}).length} offen</span></td></tr>`});o+='</table></div>';
+ o+=`<h2>Kontoverlauf aller Bots</h2><div class="card">${multi(B.map(b=>({h:b.equity_history||[],c:b.col,dead:!b.alive})),R.start||10000,DEATH)}<div class="mut">${B.map(b=>`<span style="color:${b.col}">●</span> ${esc(b.name)}`).join(' &nbsp;')}</div></div>`;
+ o+='<h2>Einzelkurven</h2><div class="grid">';for(const b of B)o+=`<div class="card ${b.alive?'':'dead'}" style="margin:0"><b style="font-size:13px;color:${b.col}">${esc(b.name)}</b> <span class="${cls(b.pnl_pct)}" style="font-size:12px">${sg(b.pnl_pct)}${f2(b.pnl_pct,1)} %</span>${multi([{h:b.equity_history||[],c:b.col}],b.start_money,null,300,90,false)}</div>`;o+='</div>';
+ o+='<h2>Offene Positionen je Bot</h2><div class="card">';let any=false;
+ for(const b of alive){const P=Object.entries(b.positions||{});if(!P.length)continue;any=true;o+=`<div style="margin-top:6px"><b style="color:${b.col}">${esc(b.name)}</b> <span class="mut">Bargeld ${f2(b.cash,0)} $</span></div><table>`;
+  for(const[k,p] of P){const lp=((s.last_prices||{})[k]||{}).price;const pc=lp?(lp/p.entry-1)*100:0;o+=`<tr><td>${esc(p.name)}<br><span class="mut">seit ${tm(p.opened)}</span></td><td>${f2(p.entry)} → ${f2(lp)} ${cur(p.cur)}</td><td class="${cls(pc)}">${sg(pc)}${f2(pc)} %</td></tr>`}o+='</table>'}
+ if(!any)o+='<div class="mut">Gerade keine offenen Positionen – die Bots warten auf ihre Kaufsignale.</div>';o+='</div>';
+ o+='<h2>Letzte Trades</h2><div class="card">';const T=s.trades||[];if(!T.length)o+='<div class="mut">Noch keine Trades.</div>';else{o+='<table>';for(const t of T.slice(0,30)){o+=`<tr><td>${tm(t.ts)}</td><td><b style="color:${byId[t.bot]?.col||'#ccc'}">${esc(t.bot_name)}</b><br><b>${esc(t.side)}</b> ${esc(t.name)}<br><span class="mut">${esc(t.why)}</span></td><td>${f2(t.price)} ${cur(t.cur)}${t.pnl_pct!=null?`<br><span class="${cls(t.pnl_pct)}">${sg(t.pnl_pct)}${f2(t.pnl_pct)} %</span>`:''}</td></tr>`}o+='</table>'}o+='</div>';
+ o+='<h2>✚ Geburten · † Tode</h2><div class="card">';const L=s.life_events||[];if(!L.length)o+='<div class="mut">Noch keine.</div>';else for(const e of L)o+=`<div style="margin:5px 0"><span class="mut">${tm(e.ts)}</span> ${esc(e.text)}</div>`;o+='</div>';
+ o+='<h2>Entscheidungen</h2><div class="card">';const D=s.decisions||[];if(!D.length)o+='<div class="mut">Noch keine.</div>';else{o+='<table>';for(const d of D.slice(0,15))o+=`<tr><td>${tm(d.ts)}</td><td><b>${esc(d.bot_name)}</b>: ${esc(d.action)} ${esc(d.sym)}<br><span class="mut">${esc(d.why)}</span></td></tr>`;o+='</table>'}o+='</div>';
+ const U=s.universe||{};o+='<h2>Signal-Übersicht (alle Werte)</h2><div class="card"><table><tr><th>Wert</th><th>Kurs</th><th>Im Depot bei</th></tr>';
+ for(const[k,u] of Object.entries(U)){const lp=(s.last_prices||{})[k]||{};const ch=lp.prev_close?(lp.price/lp.prev_close-1)*100:null;const own=alive.filter(b=>(b.positions||{})[k]).map(b=>esc(b.name));
+  o+=`<tr><td><b>${esc(u.name)}</b><br><span class="mut">${esc(k)}</span></td><td>${f2(lp.price)} ${cur(lp.cur)}${ch!=null?`<br><span class="${cls(ch)}">${sg(ch)}${f2(ch)} %</span>`:''}</td><td class="mut">${own.length?own.join(', '):'–'}</td></tr>`}o+='</table></div>';
  const I=s.info||{};o+=`<h2>Wichtige Termine heute (investing.com)</h2><div class="card"><div class="mut">Nur Kontext: ${esc(I.note||'')}</div><table>`;
  for(const e of (I.calendar||[]).filter(e=>e.imp>=3))o+=`<tr><td>${tm(e.time)}</td><td><b>${esc(e.cur)}</b> ${esc(e.event)}</td><td class="mut">Prog. ${esc(e.forecast||'–')}<br>Ist ${esc(e.actual||'–')}</td></tr>`;o+=`</table><div class="mut">Stand ${tm(I.updated)}</div></div>`;
  o+='<h2>Nachrichten</h2><div class="card">';for(const n of (I.news_general||[]).slice(0,10))o+=`<div style="margin:6px 0"><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.t)}</a><br><span class="mut">${esc(n.src)} · ${tm(n.ts)}</span></div>`;
- for(const k of Object.keys(s.positions||{})){const N=(I.news_by_symbol||{})[k]||[];if(N.length){o+=`<div style="margin-top:10px"><b>${esc(U[k]?.name||k)}</b></div>`;for(const n of N)o+=`<div class="mut">• <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.t)}</a></div>`}}
+ const held=[...new Set(alive.flatMap(b=>Object.keys(b.positions||{})))];
+ for(const k of held){const N=(I.news_by_symbol||{})[k]||[];if(N.length){o+=`<div style="margin-top:10px"><b>${esc(U[k]?.name||k)}</b></div>`;for(const n of N)o+=`<div class="mut">• <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.t)}</a></div>`}}
  o+=`<div class="mut" style="margin-top:8px">Quellen: ${Object.entries(I.status||{}).map(([k,v])=>esc(k)+': '+esc(v)).join(' · ')}</div></div>`;
- const B=s.backtest;if(B){o+=`<h2>Backtest (historisch – kein Live-Ergebnis)</h2><div class="card"><div class="mut">${esc(B.strategy)} · ${B.from} bis ${B.to} · Tagesdaten</div><div class="grid">
- <div>Rendite<br><b class="${cls(B.return_pct)}">${f2(B.return_pct)} %</b></div><div>Max. Rückgang<br><b class="neg">−${f2(B.max_drawdown_pct)} %</b></div>
- <div>Trades<br><b>${B.trades}</b></div><div>Trefferquote<br><b>${f2(B.win_rate_pct,1)} %</b></div><div>Ø Gewinn / Ø Verlust<br><b>+${f2(B.avg_win_pct)} % / ${f2(B.avg_loss_pct)} %</b></div><div>Zum Vergleich: alle Werte kaufen & halten<br><b>${f2(B.buy_hold_equal_weight_pct)} %</b></div></div>${curve((B.curve||[]).map(p=>[new Date(p[0]).getTime()/1000,p[1]]),B.start)}</div>`}
- const R=(s.rules||{}).strategy||{},C=(s.rules||{}).costs||{},E=(s.rules||{}).events||{};
- o+=`<h2>Regeln (${esc(R.name||'')})</h2><div class="card" style="font-size:13px;line-height:1.5">
- • Kauf nur bei Aufwärtstrend: Kurs über ${R.sma_slow}-Tage-Schnitt und ${R.sma_fast}-Tage-Schnitt über ${R.sma_slow}-Tage-Schnitt<br>
- • Auslöser: Kurs bricht über das Hoch der letzten ${R.breakout_days} Tage<br>• Je Position ca. ${f2(R.position_pct*100,0)} % des Kontos, max. ${R.max_positions} Positionen, Gold+Silber max. ${f2(R.max_metals_pct*100,0)} %<br>
- • Stop-Loss −${f2(R.stop_loss_pct*100,0)} % vom Einstieg; ab +${f2(R.trail_activate_pct*100,0)} % Nachzieh-Stop −${f2(R.trail_pct*100,0)} % vom Hoch${R.trend_exit?`; Verkauf auch, wenn Tagesschluss unter ${R.sma_slow}-Tage-Schnitt`:''}<br>
- • Nach Verlust ${R.reentry_cooldown_days} Tage Pause für diesen Wert · Handel nur bei offener Börse<br>• Keine neuen Käufe ${E.block_minutes_before} Min vor bis ${E.block_minutes_after} Min nach wichtigen Wirtschaftsterminen (USD/EUR)<br>
- • Kosten: ${f2(C.fee_usd)} $ Gebühr je Trade + ${f2((C.slippage_pct||0)*100)} % Schlupf · Kurse von Yahoo Finance (bis ~15 Min verzögert) · Konto in USD, EUR-Werte mit Live-EUR/USD umgerechnet</div>
+ const BT=s.backtest;if(BT){o+=`<h2>Backtest je Strategie (historisch – kein Live-Ergebnis)</h2><div class="card"><div class="mut">${esc(BT.label)} · ${BT.from} bis ${BT.to} · je 10.000 $ · Tagesdaten</div><table><tr><th>Strategie</th><th>Rendite</th><th>Max. Rückg.</th><th>Trades</th></tr>`;
+  const E=Object.entries(BT.bots||{}).sort((a,b)=>b[1].return_pct-a[1].return_pct);for(const[n,r] of E)o+=`<tr><td><b>${esc(n)}</b><br><span class="mut">${esc(r.desc)}</span></td><td class="${cls(r.return_pct)}">${sg(r.return_pct)}${f2(r.return_pct)} %</td><td class="neg">−${f2(r.max_drawdown_pct)} %</td><td>${r.trades}<br><span class="mut">${f2(r.win_rate_pct,0)} %</span></td></tr>`;
+  o+='</table>';o+=multi(E.map(([n,r],i)=>({h:(r.curve||[]).map(p=>[new Date(p[0]).getTime()/1000,p[1]]),c:COL[i%COL.length]})),10000,DEATH);o+=`<div class="mut">${E.map(([n],i)=>`<span style="color:${COL[i%COL.length]}">●</span> ${esc(n)}`).join(' &nbsp;')}</div></div>`}
+ const C=R.costs||{},EV=R.events||{};
+ o+=`<h2>Regeln</h2><div class="card" style="font-size:13px;line-height:1.5">
+ <b>Leben & Tod</b><br>• Jeder Bot startet mit ${f2(R.start||10000,0)} $ Spielgeld und eigener Strategie (siehe Rangliste)<br>
+ • <b>Tod:</b> fällt das Konto (Bargeld + Positionen) unter ${f2(DEATH,0)} $, stirbt der Bot – Positionen werden geschlossen, Datum wird protokolliert<br>
+ • <b>Fortpflanzung:</b> mindestens ${R.repro_min_trades} abgeschlossene Trades und Konto über Startgeld → ein Kind mit leicht veränderten Regeln (Mutation)<br>
+ • Das Kind bekommt <b>frische ${f2(R.start||10000,0)} $ Spielgeld</b> (der Eltern-Bot gibt nichts ab) – so startet jeder fair mit gleichem Abstand zur Todeslinie<br>
+ • Danach frühestens nach ${R.repro_cooldown_days} Tagen und ${R.repro_min_trades} weiteren abgeschlossenen Trades wieder · höchstens ${R.pop_cap} lebende Bots · sinkt die Zahl lebender Bots unter ${R.pop_min}, wird eine veränderte Kopie des besten Bots nachgesetzt<br>
+ <b>Handel</b><br>• Handel nur bei offener Börse · Kurse von Yahoo Finance (bis ~15 Min verzögert), Signale auf Tagesschlusskursen<br>
+ • Keine neuen Käufe ${EV.block_minutes_before} Min vor bis ${EV.block_minutes_after} Min nach wichtigen Wirtschaftsterminen (USD/EUR, investing.com)<br>
+ • Kosten: ${f2(C.fee_usd)} $ Gebühr je Trade + ${f2((C.slippage_pct||0)*100)} % Schlupf · Konto in USD, EUR-Werte mit Live-EUR/USD umgerechnet<br>• Keine echten Trades, kein echtes Geld, keine Anlageberatung</div>
  <div class="mut" style="text-align:center;margin:14px 0">Veröffentlicht ${tm(s.published_at)} · aktualisiert sich jede Minute</div>`;
  document.getElementById('app').innerHTML=o}
-async function load(){try{const r=await fetch(GIST+'?t='+Date.now(),{cache:'no-store'});const d=await r.json();if(d&&d.equity!=null){S=d;render()}else if(!S)document.getElementById('app').innerHTML='<div class="card">Simulation startet gerade – gleich nochmal versuchen.</div>'}catch(e){if(!S)document.getElementById('app').innerHTML='<div class="card">Daten kommen gerade nicht an – gleich nochmal versuchen.</div>'}}
+async function load(){try{const r=await fetch(GIST+'?t='+Date.now(),{cache:'no-store'});const d=await r.json();if(d&&d.bots){S=d;render()}else if(!S)document.getElementById('app').innerHTML='<div class="card">Simulation startet gerade – gleich nochmal versuchen.</div>'}catch(e){if(!S)document.getElementById('app').innerHTML='<div class="card">Daten kommen gerade nicht an – gleich nochmal versuchen.</div>'}}
 load();setInterval(load,60000);
 </script></body></html>
